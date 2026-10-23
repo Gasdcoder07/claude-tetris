@@ -36,6 +36,10 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Permite que la revisión corra en PRs abiertos por bots (p. ej. los que
+          # abre el workflow Issue Implement). Sin esto la acción falla con
+          # "Workflow initiated by non-human actor".
+          allowed_bots: 'claude,github-actions[bot]'
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
