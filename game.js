@@ -4,16 +4,36 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK = 30;
 
-const COLORS = [
-  null,
-  '#4dd0e1', // I - cyan
-  '#ffd54f', // O - yellow
-  '#ba68c8', // T - purple
-  '#81c784', // S - green
-  '#e57373', // Z - red
-  '#90caf9', // J - pale blue
-  '#ffb74d', // L - orange
-];
+// Paletas 1-indexadas: el slot 0 es null porque 0 = celda vacia.
+const PALETTES = {
+  dark: [
+    null,
+    '#4dd0e1', // I - cyan
+    '#ffd54f', // O - yellow
+    '#ba68c8', // T - purple
+    '#81c784', // S - green
+    '#e57373', // Z - red
+    '#90caf9', // J - pale blue
+    '#ffb74d', // L - orange
+  ],
+  light: [
+    null,
+    '#0097a7', // I - cyan
+    '#e6a700', // O - yellow
+    '#8e24aa', // T - purple
+    '#388e3c', // S - green
+    '#c62828', // Z - red
+    '#3949ab', // J - indigo
+    '#ef6c00', // L - orange
+  ],
+};
+
+const THEME_CHROME = {
+  dark: { grid: '#22222e', highlight: 'rgba(255,255,255,0.12)' },
+  light: { grid: '#d7dcea', highlight: 'rgba(255,255,255,0.35)' },
+};
+
+const THEME_KEY = 'tetris-theme';
 
 const PIECES = [
   null,
@@ -39,8 +59,11 @@ const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
 const overlayScore = document.getElementById('overlay-score');
 const restartBtn = document.getElementById('restart-btn');
+const themeBtn = document.getElementById('theme-btn');
+const themeLabel = document.getElementById('theme-label');
 
 let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
+let theme, COLORS, themeChrome;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -163,13 +186,13 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
   context.fillStyle = color;
   context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
   // highlight
-  context.fillStyle = 'rgba(255,255,255,0.12)';
+  context.fillStyle = themeChrome.highlight;
   context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
   context.globalAlpha = 1;
 }
 
 function drawGrid() {
-  ctx.strokeStyle = '#22222e';
+  ctx.strokeStyle = themeChrome.grid;
   ctx.lineWidth = 0.5;
   for (let c = 1; c < COLS; c++) {
     ctx.beginPath();
@@ -250,10 +273,34 @@ function loop(ts) {
       current.y++;
     } else {
       lockPiece();
+      // lockPiece puede terminar la partida: endGame ya cancelo el frame,
+      // asi que no hay que volver a agendar uno ni seguir dibujando piezas.
+      if (gameOver) return;
     }
   }
   draw();
   animId = requestAnimationFrame(loop);
+}
+
+function applyTheme(name) {
+  theme = name;
+  COLORS = PALETTES[theme];
+  themeChrome = THEME_CHROME[theme];
+  document.documentElement.dataset.theme = theme;
+  themeBtn.setAttribute('aria-pressed', String(theme === 'light'));
+  themeLabel.textContent = theme === 'light' ? 'Claro' : 'Oscuro';
+  // El loop esta detenido en PAUSA y GAME OVER, hay que repintar a mano.
+  if (board) { draw(); drawNext(); }
+}
+
+function storedTheme() {
+  try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; }
+}
+
+function toggleTheme() {
+  const nextTheme = theme === 'light' ? 'dark' : 'light';
+  applyTheme(nextTheme);
+  try { localStorage.setItem(THEME_KEY, nextTheme); } catch (e) {}
 }
 
 function init() {
@@ -276,6 +323,7 @@ function init() {
 
 document.addEventListener('keydown', e => {
   if (e.code === 'KeyP') { togglePause(); return; }
+  if (e.code === 'KeyT') { toggleTheme(); return; }
   if (paused || gameOver) return;
   switch (e.code) {
     case 'ArrowLeft':
@@ -300,5 +348,13 @@ document.addEventListener('keydown', e => {
 });
 
 restartBtn.addEventListener('click', init);
+themeBtn.addEventListener('click', toggleTheme);
 
+// Sin eleccion guardada, el juego sigue el tema del sistema.
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', e => {
+  const stored = storedTheme();
+  if (stored !== 'light' && stored !== 'dark') applyTheme(e.matches ? 'light' : 'dark');
+});
+
+applyTheme(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
 init();

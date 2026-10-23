@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tetris</title>
   <link rel="stylesheet" href="style.css" />
+  <script>
+    (function () {
+      let t;
+      try { t = localStorage.getItem('tetris-theme'); } catch (e) {}
+      if (t !== 'light' && t !== 'dark') {
+        t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
 </head>
 <body>
   <h1 class="title">TETRIS</h1>
@@ -40,7 +50,16 @@
             <li><kbd>↓</kbd> bajar</li>
             <li><kbd>Space</kbd> caída</li>
             <li><kbd>P</kbd> pausa</li>
+            <li><kbd>T</kbd> tema</li>
           </ul>
+        </div>
+
+        <div class="panel-section">
+          <span class="label">TEMA</span>
+          <button id="theme-btn" class="theme-switch" type="button" aria-pressed="false">
+            <span class="theme-switch-track"><span class="theme-switch-thumb"></span></span>
+            <span id="theme-label">Oscuro</span>
+          </button>
         </div>
       </aside>
     </div>
