@@ -2,7 +2,7 @@ name: Issue Triage
 
 on:
   issues:
-    types: [opened, reopened]
+    types: [opened, edited, reopened]
 
 concurrency:
   group: issue-triage-${{ github.event.issue.number }}
@@ -35,6 +35,7 @@ jobs:
           prompt: |
             REPO: ${{ github.repository }}
             ISSUE: ${{ github.event.issue.number }}
+            EVENTO: ${{ github.event.action }}
             TITULO: ${{ github.event.issue.title }}
             AUTOR: ${{ github.event.issue.user.login }}
             CUERPO:
@@ -56,9 +57,14 @@ jobs:
                `gh issue edit ${{ github.event.issue.number }} --add-label "<label>"`
                Normalmente una de bug / enhancement / documentation / question / duplicate / invalid,
                más good first issue o help wanted cuando apliquen.
-               NUNCA añadas la label `claude:implementar`: esa la pone una persona.
-            5. Publica UN solo comentario en español con
-               `gh issue comment ${{ github.event.issue.number }} --body "..."` que incluya:
+               Si el issue fue editado (EVENTO: edited) y alguna label que pusiste antes ya no
+               aplica, quítala con `--remove-label "<label>"` en la misma llamada.
+               NUNCA añadas ni quites la label `claude:implementar`: esa la gestiona una persona.
+            5. Publica UN solo comentario en español con:
+               `gh issue comment ${{ github.event.issue.number }} --edit-last --create-if-none --body "..."`
+               Ese `--edit-last --create-if-none` es importante: este workflow también se ejecuta
+               cada vez que se edita el issue, así que debes ACTUALIZAR tu comentario de triage
+               anterior en vez de añadir uno nuevo. El comentario debe incluir:
                - Resumen de lo que entiendes del issue y su clasificación.
                - Archivos y funciones concretas de game.js que probablemente haya que tocar.
                - Riesgos o invariantes de CLAUDE.md que el cambio podría romper.
