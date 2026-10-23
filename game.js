@@ -15,6 +15,11 @@ const PALETTES = {
     '#e57373', // Z - red
     '#90caf9', // J - pale blue
     '#ffb74d', // L - orange
+    '#f06292', // + - rosa
+    '#4db6ac', // U - verde azulado
+    '#dce775', // Y - lima
+    '#eceff1', // 1x1 - blanco (premio)
+    '#a1887f', // 3x3 hueca - marron (reto)
   ],
   light: [
     null,
@@ -25,6 +30,11 @@ const PALETTES = {
     '#c62828', // Z - red
     '#3949ab', // J - indigo
     '#ef6c00', // L - orange
+    '#d81b60', // + - rosa
+    '#00796b', // U - verde azulado
+    '#9e9d24', // Y - lima
+    '#455a64', // 1x1 - pizarra (premio)
+    '#6d4c41', // 3x3 hueca - marron (reto)
   ],
 };
 
@@ -44,7 +54,19 @@ const PIECES = [
   [[5,5,0],[0,5,5],[0,0,0]],                  // Z
   [[6,0,0],[6,6,6],[0,0,0]],                  // J
   [[0,0,7],[7,7,7],[0,0,0]],                  // L
+  [[0,8,0],[8,8,8],[0,8,0]],                  // +
+  [[9,0,9],[9,0,9],[9,9,9]],                  // U
+  [[10,0,10],[0,10,0],[0,10,0]],              // Y
+  [[11]],                                     // 1x1 - premio por tetris
+  [[12,12,12],[12,0,12],[12,12,12]],          // 3x3 hueca - reto
 ];
+
+// La 1x1 no entra en el sorteo: solo se gana haciendo un tetris.
+const REWARD_PIECE = 11;
+const CHALLENGE_PIECE = 12;
+const CHALLENGE_CHANCE = 0.05;
+const NORMAL_PIECES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const CHALLENGE_BONUS = 300;
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
 
@@ -63,16 +85,21 @@ const themeBtn = document.getElementById('theme-btn');
 const themeLabel = document.getElementById('theme-label');
 
 let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
+let rewardPending;
 let theme, COLORS, themeChrome;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
 }
 
-function randomPiece() {
-  const type = Math.floor(Math.random() * 7) + 1;
+function makePiece(type) {
   const shape = PIECES[type].map(row => [...row]);
   return { type, shape, x: Math.floor(COLS / 2) - Math.floor(shape[0].length / 2), y: 0 };
+}
+
+function randomPiece() {
+  if (Math.random() < CHALLENGE_CHANCE) return makePiece(CHALLENGE_PIECE);
+  return makePiece(NORMAL_PIECES[Math.floor(Math.random() * NORMAL_PIECES.length)]);
 }
 
 function collide(shape, ox, oy) {
@@ -131,8 +158,11 @@ function clearLines() {
     score += (LINE_SCORES[cleared] || 0) * level;
     level = Math.floor(lines / 10) + 1;
     dropInterval = Math.max(100, 1000 - (level - 1) * 90);
+    // Un tetris (4 lineas de golpe) regala la pieza 1x1 como siguiente.
+    if (cleared === 4) rewardPending = true;
     updateHUD();
   }
+  return cleared;
 }
 
 function ghostY() {
@@ -159,14 +189,20 @@ function softDrop() {
 }
 
 function lockPiece() {
+  const lockedType = current.type;
   merge();
-  clearLines();
+  const cleared = clearLines();
+  if (lockedType === CHALLENGE_PIECE && cleared) {
+    score += CHALLENGE_BONUS * cleared * level;
+    updateHUD();
+  }
   spawn();
 }
 
 function spawn() {
   current = next;
-  next = randomPiece();
+  next = rewardPending ? makePiece(REWARD_PIECE) : randomPiece();
+  rewardPending = false;
   if (collide(current.shape, current.x, current.y)) {
     endGame();
   }
@@ -312,6 +348,7 @@ function init() {
   gameOver = false;
   dropInterval = 1000;
   dropAccum = 0;
+  rewardPending = false;
   lastTime = performance.now();
   next = randomPiece();
   spawn();
