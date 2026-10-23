@@ -1,0 +1,71 @@
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened, reopened]
+
+concurrency:
+  group: issue-triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    # Si el issue ya menciona @claude, lo atiende claude.yml: no duplicar comentarios.
+    if: |
+      !contains(github.event.issue.body, '@claude') &&
+      !contains(github.event.issue.title, '@claude')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Analizar y etiquetar el issue
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            ISSUE: ${{ github.event.issue.number }}
+            TITULO: ${{ github.event.issue.title }}
+            AUTOR: ${{ github.event.issue.user.login }}
+            CUERPO:
+            ${{ github.event.issue.body }}
+
+            Eres el responsable de triage de este repositorio (Tetris en JS vanilla:
+            index.html, style.css, game.js — sin build, sin tests). Responde siempre en español.
+
+            Haz lo siguiente, en orden:
+
+            1. Lee CLAUDE.md y los archivos relevantes (game.js, index.html, style.css) para
+               juzgar si lo que describe el issue es coherente con el código real.
+            2. Clasifica el issue: bug, petición de funcionalidad, documentación, pregunta o inválido.
+            3. Busca duplicados con `gh search issues --repo ${{ github.repository }} "<palabras clave>"`.
+               Si es un duplicado claro, dilo en el comentario referenciando el issue original
+               (por ejemplo "#12") y añade la label `duplicate`.
+            4. Consulta las labels disponibles con `gh label list` y aplica SOLO labels que ya
+               existan en esa lista, usando:
+               `gh issue edit ${{ github.event.issue.number }} --add-label "<label>"`
+               Normalmente una de bug / enhancement / documentation / question / duplicate / invalid,
+               más good first issue o help wanted cuando apliquen.
+               NUNCA añadas la label `claude:implementar`: esa la pone una persona.
+            5. Publica UN solo comentario en español con
+               `gh issue comment ${{ github.event.issue.number }} --body "..."` que incluya:
+               - Resumen de lo que entiendes del issue y su clasificación.
+               - Archivos y funciones concretas de game.js que probablemente haya que tocar.
+               - Riesgos o invariantes de CLAUDE.md que el cambio podría romper.
+               - Si falta información, qué datos pedirle al autor.
+               - Si el issue es accionable y está bien especificado, indica que se puede añadir
+                 la label `claude:implementar` para que Claude abra un PR con la solución.
+
+            No modifiques ningún archivo del repositorio: este trabajo es solo de análisis.
+          claude_args: |
+            --allowedTools "Read,Glob,Grep,Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(gh label list:*),Bash(gh search issues:*)"
