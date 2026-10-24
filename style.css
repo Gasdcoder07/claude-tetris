@@ -109,6 +109,15 @@ body {
   letter-spacing: 1px;
 }
 
+.value-sm {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.value-sm.frozen {
+  color: var(--danger);
+}
+
 #next-canvas {
   display: block;
   border: 1px solid var(--border);

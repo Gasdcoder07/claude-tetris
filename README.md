@@ -38,6 +38,18 @@ Es una versión jugable del Tetris clásico con todas las mecánicas que esperar
 - **5 piezas extra**: `+`, `U` e `Y` (sorteo normal), una pieza **1x1** y una **3x3 hueca**.
 - La pieza **1x1** no sale por azar: es un **premio por tetris**. Al eliminar 4 líneas de golpe aparece en la vista previa y es la siguiente pieza en caer.
 - La pieza **3x3 hueca** es un **reto**: solo sale el ~5 % de las veces y, si consigues eliminar líneas con ella, da **300 puntos extra por línea × nivel**.
+- **Piezas especiales con efecto**: cada **10 líneas** eliminadas aparece un bloque **1x1 con icono** cuyo efecto se sortea al azar. No se apila: al aterrizar se consume y dispara su efecto.
+
+| Pieza | Icono | Efecto |
+|---|---|---|
+| Bomba | 💣 | Destruye el área 3×3 centrada en la celda donde aterrizó |
+| Rayo | ⚡ | Limpia la fila y la columna completas de esa celda |
+| Tinte | 🎨 | Convierte todos los bloques del color más abundante en **comodines** |
+| Gravedad | ⬇ | Compacta cada columna: los bloques caen y desaparecen los huecos |
+| Congelar | ❄ | Detiene la caída automática durante 5 s (puedes seguir moviendo y rotando) |
+
+- Los **comodines** (★) son bloques frágiles: cuentan como llenos para completar línea, pero **en cuanto se limpia cualquier línea desaparecen todos** del tablero.
+- El panel lateral muestra cuántas líneas faltan para la próxima especial, qué especial viene y la cuenta atrás del congelado.
 - **Rotación** con _wall kicks_ básicos (pequeños desplazamientos para que la pieza pueda rotar pegada a la pared).
 - **Soft drop** (bajada acelerada) y **hard drop** (caída instantánea).
 - **Pieza fantasma** (_ghost piece_): muestra dónde aterrizará la pieza actual.

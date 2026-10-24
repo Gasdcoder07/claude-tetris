@@ -20,6 +20,12 @@ const PALETTES = {
     '#dce775', // Y - lima
     '#eceff1', // 1x1 - blanco (premio)
     '#a1887f', // 3x3 hueca - marron (reto)
+    '#ef5350', // bomba
+    '#fff176', // rayo
+    '#ce93d8', // tinte
+    '#80cbc4', // gravedad
+    '#64b5f6', // congelar
+    '#fafafa', // comodin
   ],
   light: [
     null,
@@ -35,6 +41,12 @@ const PALETTES = {
     '#9e9d24', // Y - lima
     '#455a64', // 1x1 - pizarra (premio)
     '#6d4c41', // 3x3 hueca - marron (reto)
+    '#d32f2f', // bomba
+    '#f9a825', // rayo
+    '#8e24aa', // tinte
+    '#00897b', // gravedad
+    '#1565c0', // congelar
+    '#90a4ae', // comodin
   ],
 };
 
@@ -59,6 +71,12 @@ const PIECES = [
   [[10,0,10],[0,10,0],[0,10,0]],              // Y
   [[11]],                                     // 1x1 - premio por tetris
   [[12,12,12],[12,0,12],[12,12,12]],          // 3x3 hueca - reto
+  [[13]],                                     // bomba
+  [[14]],                                     // rayo
+  [[15]],                                     // tinte
+  [[16]],                                     // gravedad
+  [[17]],                                     // congelar
+  null,                                       // 18 = comodin: valor de celda, nunca una pieza
 ];
 
 // La 1x1 no entra en el sorteo: solo se gana haciendo un tetris.
@@ -67,6 +85,31 @@ const CHALLENGE_PIECE = 12;
 const CHALLENGE_CHANCE = 0.05;
 const NORMAL_PIECES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const CHALLENGE_BONUS = 300;
+
+// Piezas especiales: tampoco entran en el sorteo, aparecen cada SPECIAL_EVERY lineas.
+// Son 1x1, nunca se fusionan con el tablero: al aterrizar se consumen y lanzan su efecto.
+const SPECIAL_PIECES = [13, 14, 15, 16, 17];
+const WILDCARD = 18;
+const SPECIAL_EVERY = 5;
+const FREEZE_MS = 5000;
+const SPECIAL_SCORE = 10; // por bloque eliminado, x nivel
+
+const SPECIAL_NAMES = {
+  13: 'BOMBA',
+  14: 'RAYO',
+  15: 'TINTE',
+  16: 'GRAVEDAD',
+  17: 'CONGELAR',
+};
+
+const GLYPHS = {
+  13: '\u{1F4A3}',
+  14: '\u26A1',
+  15: '\u{1F3A8}',
+  16: '\u2B07',
+  17: '\u2744',
+  18: '\u2605',
+};
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
 
@@ -83,9 +126,10 @@ const overlayScore = document.getElementById('overlay-score');
 const restartBtn = document.getElementById('restart-btn');
 const themeBtn = document.getElementById('theme-btn');
 const themeLabel = document.getElementById('theme-label');
+const specialEl = document.getElementById('special-status');
 
 let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
-let rewardPending;
+let rewardPending, specialPending, nextSpecialAt, freezeRemaining;
 let theme, COLORS, themeChrome;
 
 function createBoard() {
@@ -158,11 +202,91 @@ function clearLines() {
     score += (LINE_SCORES[cleared] || 0) * level;
     level = Math.floor(lines / 10) + 1;
     dropInterval = Math.max(100, 1000 - (level - 1) * 90);
+    // Los comodines son fragiles: cualquier linea limpiada los borra a todos.
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        if (board[r][c] === WILDCARD) board[r][c] = 0;
     // Un tetris (4 lineas de golpe) regala la pieza 1x1 como siguiente.
     if (cleared === 4) rewardPending = true;
+    // Una sola jugada puede cruzar mas de un umbral, de ahi el while.
+    while (lines >= nextSpecialAt) {
+      specialPending = true;
+      nextSpecialAt += SPECIAL_EVERY;
+    }
     updateHUD();
   }
   return cleared;
+}
+
+function randomSpecial() {
+  return makePiece(SPECIAL_PIECES[Math.floor(Math.random() * SPECIAL_PIECES.length)]);
+}
+
+// Bomba: arrasa el 3x3 centrado en la celda. Deja los bloques de arriba flotando;
+// recompactarlos es justo el trabajo de la pieza gravedad.
+function blastArea(x, y) {
+  let hits = 0;
+  for (let r = y - 1; r <= y + 1; r++) {
+    for (let c = x - 1; c <= x + 1; c++) {
+      if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
+      if (board[r][c]) { board[r][c] = 0; hits++; }
+    }
+  }
+  return hits;
+}
+
+// Rayo: fila y columna completas de la celda.
+function blastCross(x, y) {
+  let hits = 0;
+  for (let c = 0; c < COLS; c++) if (board[y][c]) { board[y][c] = 0; hits++; }
+  for (let r = 0; r < ROWS; r++) if (board[r][x]) { board[r][x] = 0; hits++; }
+  return hits;
+}
+
+// Tinte: el color mas abundante del tablero pasa a comodin.
+function tintColor() {
+  const count = new Map();
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const v = board[r][c];
+      if (!v || v === WILDCARD) continue;
+      count.set(v, (count.get(v) || 0) + 1);
+    }
+  }
+  let best = 0, bestN = 0;
+  for (const [v, n] of count) if (n > bestN) { best = v; bestN = n; }
+  if (!best) return 0;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (board[r][c] === best) board[r][c] = WILDCARD;
+  return bestN;
+}
+
+// Gravedad: cada columna cae y se come sus huecos.
+function applyGravity() {
+  let moved = 0;
+  for (let c = 0; c < COLS; c++) {
+    const stack = [];
+    for (let r = 0; r < ROWS; r++) if (board[r][c]) stack.push(board[r][c]);
+    for (let r = ROWS - 1, i = stack.length - 1; r >= 0; r--, i--) {
+      const v = i >= 0 ? stack[i] : 0;
+      if (board[r][c] !== v) moved++;
+      board[r][c] = v;
+    }
+  }
+  return moved;
+}
+
+function applySpecial(type, x, y) {
+  let hits = 0;
+  switch (type) {
+    case 13: hits = blastArea(x, y); break;
+    case 14: hits = blastCross(x, y); break;
+    case 15: hits = tintColor(); break;
+    case 16: hits = applyGravity(); break;
+    case 17: freezeRemaining = FREEZE_MS; break;
+  }
+  score += SPECIAL_SCORE * hits * level;
 }
 
 function ghostY() {
@@ -190,7 +314,9 @@ function softDrop() {
 
 function lockPiece() {
   const lockedType = current.type;
-  merge();
+  // Las especiales no se fusionan: se consumen al aterrizar.
+  if (SPECIAL_NAMES[lockedType]) { applySpecial(lockedType, current.x, current.y); updateHUD(); }
+  else merge();
   const cleared = clearLines();
   if (lockedType === CHALLENGE_PIECE && cleared) {
     score += CHALLENGE_BONUS * cleared * level;
@@ -201,8 +327,10 @@ function lockPiece() {
 
 function spawn() {
   current = next;
-  next = rewardPending ? makePiece(REWARD_PIECE) : randomPiece();
-  rewardPending = false;
+  // El premio por tetris tiene prioridad; la especial queda pendiente, no se pierde.
+  if (rewardPending) { next = makePiece(REWARD_PIECE); rewardPending = false; }
+  else if (specialPending) { next = randomSpecial(); specialPending = false; }
+  else next = randomPiece();
   if (collide(current.shape, current.x, current.y)) {
     endGame();
   }
@@ -213,6 +341,16 @@ function updateHUD() {
   scoreEl.textContent = score.toLocaleString();
   linesEl.textContent = lines;
   levelEl.textContent = level;
+  updateSpecialHUD();
+}
+
+function updateSpecialHUD() {
+  let text;
+  if (freezeRemaining > 0) text = `${GLYPHS[17]} ${(freezeRemaining / 1000).toFixed(1)}s`;
+  else if (next && SPECIAL_NAMES[next.type]) text = `\u00a1${SPECIAL_NAMES[next.type]}!`;
+  else text = `en ${Math.max(0, nextSpecialAt - lines)} l\u00edneas`;
+  if (specialEl.textContent !== text) specialEl.textContent = text;
+  specialEl.classList.toggle('frozen', freezeRemaining > 0);
 }
 
 function drawBlock(context, x, y, colorIndex, size, alpha) {
@@ -224,6 +362,13 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
   // highlight
   context.fillStyle = themeChrome.highlight;
   context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  const glyph = GLYPHS[colorIndex];
+  if (glyph) {
+    context.font = `${Math.floor(size * 0.55)}px system-ui, sans-serif`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(glyph, x * size + size / 2, y * size + size / 2 + 1);
+  }
   context.globalAlpha = 1;
 }
 
@@ -302,16 +447,24 @@ function togglePause() {
 function loop(ts) {
   const dt = ts - lastTime;
   lastTime = ts;
-  dropAccum += dt;
-  if (dropAccum >= dropInterval) {
+  // Congelar solo detiene la caida automatica; mover y rotar siguen activos.
+  // La pausa cancela el frame, asi que el contador tampoco corre en PAUSA.
+  if (freezeRemaining > 0) {
+    freezeRemaining = Math.max(0, freezeRemaining - dt);
     dropAccum = 0;
-    if (!collide(current.shape, current.x, current.y + 1)) {
-      current.y++;
-    } else {
-      lockPiece();
-      // lockPiece puede terminar la partida: endGame ya cancelo el frame,
-      // asi que no hay que volver a agendar uno ni seguir dibujando piezas.
-      if (gameOver) return;
+    updateSpecialHUD();
+  } else {
+    dropAccum += dt;
+    if (dropAccum >= dropInterval) {
+      dropAccum = 0;
+      if (!collide(current.shape, current.x, current.y + 1)) {
+        current.y++;
+      } else {
+        lockPiece();
+        // lockPiece puede terminar la partida: endGame ya cancelo el frame,
+        // asi que no hay que volver a agendar uno ni seguir dibujando piezas.
+        if (gameOver) return;
+      }
     }
   }
   draw();
@@ -349,6 +502,9 @@ function init() {
   dropInterval = 1000;
   dropAccum = 0;
   rewardPending = false;
+  specialPending = false;
+  nextSpecialAt = SPECIAL_EVERY;
+  freezeRemaining = 0;
   lastTime = performance.now();
   next = randomPiece();
   spawn();
